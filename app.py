@@ -6,14 +6,17 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import inflect
 import regex
+from googletrans import Translator
 
 import streamlit as st
 import time
 import pandas as pd
 
 # comment out, only needed for specific runtime
+# this part is specific to where tesseract is installed per user
 pt.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
+#takes two vectors (dimensionally reduced from ingredient_coor) and returns the Euclidean distance
 def euc_dist(food1, food2, ingredient_coor):
   food1_x = ingredient_coor[ingredient_coor['name'] == food1]['x'].values[0]
   food1_y = ingredient_coor[ingredient_coor['name'] == food1]['y'].values[0]
@@ -42,6 +45,8 @@ def search_food(food, allergies):
     return False
   return True
 
+#processes the string generated from the image by Pytesseract
+#matches the allergies inputted with each item on the menu
 def lookup(menu_string, allergies, ingredient_coor):
   split = menu_string.split('\n\n')
   item_names = []
@@ -69,15 +74,18 @@ def lookup(menu_string, allergies, ingredient_coor):
   lookup_table = pd.DataFrame(data = {'Item Name': item_names, 'Ingredient Matches': ingredient_matches, 'Potential Allergen Matches' : potential_matches})
   return lookup_table
 
+#processes inputted general allergies into a list of associated specific allergies
 def edible(allergy_type, allergy_types):
   allergens = []
   for altype in allergy_type:
         allergens += (allergy_types[allergy_types['Allergy'] == altype]['Food'].iloc[0])
   return allergens
 
+#main function that processes the menu image and returns the output dataframe
 #menu_file.name, general_allergies, specific_allergies, food_data, allergy_types
 def minus_allergens(menu_image, general_allergens, specific_allergens, food_data, allergy_types, ingredient_coor):
-  menu_string = pt.image_to_string(menu_image, timeout=10)
+  new_translator = Translator()
+  menu_string = new_translator.translate(pt.image_to_string(menu_image, timeout=10)).text
   engine = inflect.engine()
   allergies = edible(general_allergens, allergy_types) + specific_allergens
   lookup_df = lookup(menu_string, food_data, ingredient_coor)
@@ -188,10 +196,11 @@ def main():
 
 	if submitted:
 		with st.spinner('Processing...'):
-			## JESSIE: ALL CODE PROCESSING GO HERE
+			#load in necessary food allergy data
 			food_data = pd.read_csv("FoodData.csv")
 			allergy_types = food_data.groupby("Allergy", as_index = False).agg(list)[['Allergy','Food']]
 
+      #load in trained embeddings
 			ingredient_coor = pd.read_csv('ingredient_coor.csv').drop('Unnamed: 0', axis = 1)
 			ingredient_coor['name'] = ingredient_coor['name'].str.replace('[_]', ' ')
 
